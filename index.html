@@ -1,0 +1,45 @@
+<!doctype html>
+<canvas style="outline: 1px solid"></canvas>
+
+<script src="https://gpac.github.io/mp4box.js/dist/mp4box.all.min.js"></script>
+
+<script type="module">
+
+  import {MP4Demuxer} from "./mp4_demuxer.js";                                  // wrapper around mp4box.js. A behind this, but none of it WebCodecs
+  let demuxer = new MP4Demuxer("bbb_frag.mp4");
+  let trackInfo = await demuxer.getVideoTrackInfo();
+
+  var canvas = document.querySelector("canvas");                                // we'll use this to paint. VideoFrame is a CanvasImageSource
+  canvas.width = trackInfo.displayWidth;
+  canvas.height = trackInfo.displayHeight;
+  var ctx = canvas.getContext('2d');
+
+  // --- start coding ---
+
+  async function paintFrame(frame) {
+    ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+    frame.close();
+  }
+
+  let decoder = new VideoDecoder({
+    output: paintFrame,
+    error: e => console.error(e),
+  });
+
+  let config = {
+    codec: trackInfo.codec,                                                     // choosing the underyling codec impl
+    description: trackInfo.extradata                                            // bytestream formats (avc vs annexb)
+  };
+
+  console.assert(VideoDecoder.isConfigSupported(config))
+  decoder.configure(config);
+
+  demuxer.demuxVideo(0, (chunk) => {                                            // paint the whole video
+    decoder.decode(chunk);
+  });
+
+  // now we need audio (and avsync)
+</script>
+
+</html>
+

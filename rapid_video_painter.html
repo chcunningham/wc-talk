@@ -16,7 +16,7 @@
 
   // --- start coding ---
 
-  async function paintFrame(frame) {
+  function paintFrame(frame) {
     ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
     frame.close();
   }
@@ -34,7 +34,8 @@
   console.assert(VideoDecoder.isConfigSupported(config))
   decoder.configure(config);
 
-  demuxer.demuxVideo(0, (chunk) => {                                            // paint the whole video
+  // TODO: maybe construct chunk here, that's WebCodecs
+  demuxer.demuxVideo(0, (chunk) => {                                            // paint the whole video, talk about processing model
     decoder.decode(chunk);
   });
 

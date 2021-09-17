@@ -1,68 +1,27 @@
 <!doctype html>
+<style>
+  body {background-color: black;}
+</style>
 <canvas style="outline: 1px solid"></canvas>
 
 <script src="https://gpac.github.io/mp4box.js/dist/mp4box.all.min.js"></script>
 
 <script type="module">
+  import {VideoRenderer} from "./video_renderer.js";
 
-  import {MP4Demuxer} from "./mp4_demuxer.js";                                  // wrapper around mp4box.js. A behind this, but none of it WebCodecs
-  let demuxer = new MP4Demuxer("bbb_frag.mp4");
-  let trackInfo = await demuxer.getVideoTrackInfo();
+  // TODO: move to worker. Use OffscreenCanvas.
+  let videoRenderer = new VideoRenderer();
+  await videoRenderer.initialize('bbb_frag.mp4', document.querySelector("canvas"));
 
-  var canvas = document.querySelector("canvas");                                // we'll use this to paint. VideoFrame is a CanvasImageSource
-  canvas.width = trackInfo.displayWidth;
-  canvas.height = trackInfo.displayHeight;
-  var ctx = canvas.getContext('2d');
-
-  /*
-
-  "renderer" owns a demuxer, decoder, and buffer of ready-to-render raw media
-
-  class VideoRenderer {
-    funciton preroll() {
-    }
-
-    function render(timetsamp) {
-      frame = pickFrameAndDecodeMore(timestamp);
-      paint(frame);
-
-      if (eos())
-        return false;
-    }
-
-    function pickFrameAndBufferMore(timestamp) {
-    }
-
-    paint(frame) {
-    }
-  }
-
-  // v1 Paint frames at display refresh rate.
-  let videoRenderer = new VideoRenderer(bbb_frag.mp4);
-  let startTime = now();
-  window.requestAnimationFrame(play);
+  // Wall clock rendering.
+  // TODO: Implement AudioRenderer
+  let startTimeMs = performance.now();
   function play() {
-    if(!videoRenderer.render(now-startTime()))
-      return;
-    window.requestAnimatinFrame(play);
+    let mediaTimeUs = (performance.now() - startTimeMs) * 1000;
+    videoRenderer.render(mediaTimeUs)
+    window.requestAnimationFrame(play);
   }
-
-  // v2 Paint frames off audio clock
-  let audioRenderer = new AudioRenderer(bbb_frag.mp4); // just demux twice for now.
-  audioRenderer.render(); // decode audio, render to AudioWorklet, track current playback time. <--- AudioWorklet integration is the focus of this demo. Rest is domain knowledge.
-  window.requestAnimationFrame(syncVideo);
-  function syncVideo() {
-    audioTime = audioRenderer.getCurrentTime();
-    if (audioTime == null) // eos
-      return;
-
-    if(!videoRenderer.render(audioTime))
-      return;
-
-    window.requestAnimatinFrame(play);
-  }
-  */
-
+  play();
 </script>
 
 </html>

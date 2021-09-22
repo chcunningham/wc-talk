@@ -6,7 +6,7 @@
 <script type="module">
 
   import {MP4Demuxer} from "./mp4_demuxer.js";                                  // wrapper around mp4box.js. A behind this, but none of it WebCodecs
-  let demuxer = new MP4Demuxer("bbb_frag.mp4");
+  let demuxer = new MP4Demuxer("bbb_video_avc_frag.mp4");
   let trackInfo = await demuxer.getVideoTrackInfo();
 
   var canvas = document.querySelector("canvas");                                // we'll use this to paint. VideoFrame is a CanvasImageSource

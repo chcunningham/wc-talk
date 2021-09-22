@@ -57,6 +57,19 @@ class MP4Source {
     return this.file.moov.traks[0].mdia.minf.stbl.stsd.entries[0].avcC
   }
 
+  getAudioSpecificConfig() {
+    // TODO: make sure this is coming from the right track.
+
+    // 0x04 is the DecoderConfigDescrTag. Assuming MP4Box always puts this at position 0.
+    console.assert(this.file.moov.traks[0].mdia.minf.stbl.stsd.entries[0].esds.esd.descs[0].tag == 0x04);
+    // 0x40 is the Audio OTI, per table 5 of ISO 14496-1
+    console.assert(this.file.moov.traks[0].mdia.minf.stbl.stsd.entries[0].esds.esd.descs[0].oti == 0x40);
+    // 0x05 is the DecSpecificInfoTag
+    console.assert(this.file.moov.traks[0].mdia.minf.stbl.stsd.entries[0].esds.esd.descs[0].descs[0].tag == 0x05);
+
+    return this.file.moov.traks[0].mdia.minf.stbl.stsd.entries[0].esds.esd.descs[0].descs[0].data;
+  }
+
   selectTrack(track) {
     console.debug('selecting track %d', track.id);
     this.file.setExtractionOptions(track.id);
@@ -160,17 +173,30 @@ export class MP4PullDemuxer {
     this.audioTrack = info.audioTracks[0];
   }
 
+  async getAudioTrackInfo() {
+    await this.ready();
+
+    let info = {
+      codec: this.audioTrack.codec,
+      numberOfChannels: this.audioTrack.audio.channel_count,
+      sampleRate: this.audioTrack.audio.sample_rate,
+      extradata: this.source.getAudioSpecificConfig()
+    };
+
+    return info;
+  }
+
   async getVideoTrackInfo() {
     await this.ready();
 
-    let config = {
+    let info = {
       codec: this.videoTrack.codec,
       displayWidth: this.videoTrack.track_width,
       displayHeight: this.videoTrack.track_height,
       extradata: this.getAvcDescription(this.source.getAvccBox())
     }
 
-    return Promise.resolve(config);
+    return Promise.resolve(info);
   }
 
   selectTrack(track) {

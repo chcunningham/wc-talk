@@ -1,6 +1,14 @@
 const FRAME_BUFFER_TARGET_SIZE = 3;
+const ENABLE_DEBUG_LOGGING = false;
 
 import {MP4PullDemuxer} from "./mp4_pull_demuxer.js";
+
+function debugLog(msg) {
+  if (!ENABLE_DEBUG_LOGGING)
+    return;
+
+  console.debug(msg);
+}
 
 export class VideoRenderer {
   async initialize(fileUri, canvas) {
@@ -36,7 +44,7 @@ export class VideoRenderer {
   }
 
   render(timestamp) {
-    console.debug('render(%d)', timestamp);
+    debugLog('render(%d)', timestamp);
     let frame = this.chooseFrame(timestamp);
     this.fillFrameBuffer();
 
@@ -70,7 +78,7 @@ export class VideoRenderer {
     console.assert(frameIndex != -1);
 
     if (frameIndex > 0)
-      console.debug('dropping %d stale frames', frameIndex);
+      debugLog('dropping %d stale frames', frameIndex);
 
 
       for (let i = 0; i < frameIndex; i++) {
@@ -79,24 +87,26 @@ export class VideoRenderer {
       }
 
     let chosenFrame = this.frameBuffer[0];
-    console.debug('frame time delta = %dms (%d vs %d)', minTimeDelta/1000, timestamp, chosenFrame.timestamp)
+    debugLog('frame time delta = %dms (%d vs %d)', minTimeDelta/1000, timestamp, chosenFrame.timestamp)
     return chosenFrame;
   }
 
   makeChunk(sample) {
-    const pts_secs = sample.cts / sample.timescale;
+    const pts_us = sample.cts * 1000000 / sample.timescale;
+    const duration_us = sample.duration * 1000000 / sample.timescale;
+    // console.error('making chunk @ %d for %d', pts_us, duration_us);
     const type = sample.is_sync ? "key" : "delta";
     return new EncodedVideoChunk({
       type: type,
-      timestamp: pts_secs * 1000000,
-      duration: sample.duration,
+      timestamp: pts_us,
+      duration: duration_us,
       data: sample.data
     });
   }
 
   async fillFrameBuffer() {
     if (this.frameBufferFull()) {
-      console.debug('frame buffer full');
+      debugLog('frame buffer full');
 
       if (this.init_resolver) {
         this.init_resolver();
@@ -130,7 +140,7 @@ export class VideoRenderer {
   }
 
   bufferFrame(frame) {
-    console.debug('bufferFrame(%d)', frame.timestamp);
+    debugLog('bufferFrame(%d)', frame.timestamp);
     this.frameBuffer.push(frame);
   }
 

@@ -8,20 +8,34 @@
 
 <script type="module">
   import {VideoRenderer} from "./video_renderer.js";
+  import {AudioRenderer} from "./audio_renderer.js";
+
+  // TODO: move to worker.
+  let audioRenderer = new AudioRenderer();
+  let audioReady = audioRenderer.initialize('bbb_audio_aac_frag.mp4');
 
   // TODO: move to worker. Use OffscreenCanvas.
   let videoRenderer = new VideoRenderer();
-  await videoRenderer.initialize('bbb_frag.mp4', document.querySelector("canvas"));
+  let videoReady = videoRenderer.initialize('bbb_video_avc_frag.mp4', document.querySelector("canvas"));
 
-  // Wall clock rendering.
-  // TODO: Implement AudioRenderer
-  let startTimeMs = performance.now();
-  function play() {
-    let mediaTimeUs = (performance.now() - startTimeMs) * 1000;
-    videoRenderer.render(mediaTimeUs)
-    window.requestAnimationFrame(play);
-  }
-  play();
+  await Promise.all([audioReady, videoReady]);
+
+  // Audio-driven rendering.
+  audioRenderer.startPlaying();
+  window.requestAnimationFrame(function renderVideo() {
+    videoRenderer.render(audioRenderer.getMediaTime());
+    window.requestAnimationFrame(renderVideo);
+  });
+
+
+  // // Wall clock rendering.
+  // let startTimeMs = performance.now();
+  // function play() {
+  //   let mediaTimeUs = (performance.now() - startTimeMs) * 1000;
+  //   videoRenderer.render(mediaTimeUs)
+  //   window.requestAnimationFrame(play);
+  // }
+  // play();
 </script>
 
 </html>

@@ -7,7 +7,7 @@ registerProcessor("AudioSink", class AudioSink extends AudioWorkletProcessor {
   process(inputs, outputs, params) {
     // Assuming mono for now
     var available_read = this.consumerSide.available_read();
-    if (this.consumerSide.pop(outputs[0][0]) != 128)  {
+    if (this.consumerSide.pop(outputs[0][0]) != outputs[0][0].length)  {
       console.log("Warning: audio underrun");
     }
     return true;

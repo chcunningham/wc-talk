@@ -54,7 +54,7 @@ export class AudioRenderer {
     this.decoder.configure(config);
 
     // Initialize the AudioWorkletProcessor
-    this.audioContext = new AudioContext({ sampleRate: trackInfo.sampleRate });
+    this.audioContext = new AudioContext({ sampleRate: trackInfo.sampleRate, latencyHint: "playback" });
     this.audioContext.suspend();
     // Initialize the ring buffer between the decoder and the real-time audio
     // rendering thread. The AudioRenderer has buffer space for approximately

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <title>Encode and decode music with AudioEncoder, AudioDecoder, MediaStreamTrackGenerator</title>
+    <style>
+      button {
+        background-color: #555555;
+        border: none;
+        color: white;
+        padding: 15px 32px;
+        width: 150px;
+        text-align: center;
+        display: block;
+        font-size: 16px;
+      }
+      button:disabled {
+        background-color: #358738;
+      }
+    </style>
+  </head>
+
+  <body>
+    <p>Encode and decode music with AudioEncoder, AudioDecoder, MediaStreamTrackGenerator</p>
+    <button onclick="main()">Play</button>
+    <audio controls autoplay></audio>
+    <script src="./audioencoder-audiodecoder-mediastreamtrackgenerator.js"></script>
+    <div id="total"></div>
+  </body>
+</html>

@@ -1,4 +1,5 @@
-const DATA_BUFFER_TARGET_DURATION = 0.6;
+const DATA_BUFFER_DECODE_TARGET_DURATION = 0.3;
+const DATA_BUFFER_DURATION = 0.5;
 const DECODER_QUEUE_SIZE_MAX = 5;
 const ENABLE_DEBUG_LOGGING = false;
 
@@ -29,6 +30,7 @@ function URLFromFiles(files) {
 export class AudioRenderer {
   async initialize(fileUri) {
     this.fillInProgress = false;
+    this.playing = false;
 
     this.demuxer = new MP4PullDemuxer(fileUri);
 
@@ -58,9 +60,9 @@ export class AudioRenderer {
     this.audioContext.suspend();
     // Initialize the ring buffer between the decoder and the real-time audio
     // rendering thread. The AudioRenderer has buffer space for approximately
-    // 500ms of decoded audio ahead, but targets 100ms.
+    // 500ms of decoded audio ahead.
     let sampleCountIn500ms =
-      0.5 * this.audioContext.sampleRate * trackInfo.numberOfChannels;
+      DATA_BUFFER_DURATION * this.audioContext.sampleRate * trackInfo.numberOfChannels;
     let sab = RingBuffer.getStorageForCapacity(
       sampleCountIn500ms,
       Float32Array
@@ -102,6 +104,8 @@ export class AudioRenderer {
     // resolves when audio has effectively started: this can take some time if using
     // bluetooth, for example.
     debugLog("playback start");
+    this.playing = true;
+    this.fillDataBuffer();
     return this.audioContext.resume();
   }
 
@@ -109,6 +113,7 @@ export class AudioRenderer {
     // resolves when audio has effectively stopped, this can take some time if using
     // bluetooth, for example.
     debugLog("playback stop");
+    this.playing = false;
     return this.audioContext.suspend();
   }
 
@@ -155,15 +160,12 @@ export class AudioRenderer {
   }
 
   async fillDataBuffer() {
-    let inBuffer = this.availableWrite();
-    if (inBuffer < DATA_BUFFER_TARGET_DURATION ||
+    let inBuffer = this.ringbuffer.capacity() - this.availableWrite();
+    if (inBuffer > DATA_BUFFER_DECODE_TARGET_DURATION ||
         this.decoder.decodeQueueSize > DECODER_QUEUE_SIZE_MAX) {
-      // Check back later
-      window.setTimeout(this.fillDataBuffer.bind(this), 10);
       debugLog(
-        `audio buffer full (target : ${DATA_BUFFER_TARGET_DURATION}, current: ${inBuffer}), delaying decode`
-      );
-      return;
+        `audio buffer full (target : ${DATA_BUFFER_DECODE_TARGET_DURATION}, current: ${inBuffer}), delaying decode`);
+        window.setTimeout(this.fillDataBuffer.bind(this), 1000 * inBuffer / this.sampleRate / 2);
     }
     if (this.init_resolver) {
       this.init_resolver();
@@ -178,16 +180,17 @@ export class AudioRenderer {
     this.fillInProgress = true;
 
     // Decode up to the buffering target
-    while (this.availableWrite() > DATA_BUFFER_TARGET_DURATION &&
+    while (this.availableWrite() > DATA_BUFFER_DECODE_TARGET_DURATION &&
       this.decoder.decodeQueueSize < DECODER_QUEUE_SIZE_MAX) {
       let sample = await this.demuxer.readSample();
       this.decoder.decode(this.makeChunk(sample));
     }
 
     this.fillInProgress = false;
-
-    // Give decoder a chance to work, see if we saturated the pipeline.
-    window.setTimeout(this.fillDataBuffer.bind(this), 0);
+    // Don't schedule more decoding operations when not playing.
+    if (this.playing) {
+      window.setTimeout(this.fillDataBuffer.bind(this), 0);
+    }
   }
 
   bufferHealth() {

@@ -4,7 +4,7 @@ async function main() {
     latencyHint: 0,
   });
   const osc = new OscillatorNode(ac, { 
-    frequency: 0, channelCount: 1,
+    frequency: 0,
     channelCount: 1, 
     channelCountMode: 'explicit', 
     channelInterpretation: 'discrete'

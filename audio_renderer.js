@@ -46,7 +46,7 @@ export class AudioRenderer {
       description: trackInfo.extradata
     };
     this.sampleRate = trackInfo.sampleRate;
-    this.channelCount = trackInfo.sampleRate;
+    this.channelCount = trackInfo.numberOfChannels;
 
     debugLog(config);
 
@@ -58,7 +58,7 @@ export class AudioRenderer {
     this.audioContext.suspend();
     // Initialize the ring buffer between the decoder and the real-time audio
     // rendering thread. The AudioRenderer has buffer space for approximately
-    // 200ms of decoded audio ahead, but targets 100ms.
+    // 500ms of decoded audio ahead, but targets 100ms.
     let sampleCountIn500ms =
       0.5 * this.audioContext.sampleRate * trackInfo.numberOfChannels;
     let sab = RingBuffer.getStorageForCapacity(
@@ -66,15 +66,15 @@ export class AudioRenderer {
       Float32Array
     );
     this.ringbuffer = new RingBuffer(sab, Float32Array);
-
+    this.interleavingBuffers = [];
     // Get an instance of the AudioSink worklet, passing it the memory for a
     // ringbuffer, connect it to a GainNode for volume. This GainNode is in
     // turn connected to the destination.
     var workletSource = await URLFromFiles(["ringbuf.js", "audiosink.js"]);
     await this.audioContext.audioWorklet.addModule(workletSource);
     this.audioSink = new AudioWorkletNode(this.audioContext, "AudioSink", {
-      processorOptions: { sab: sab },
-      channelCount: trackInfo.numberOfChannels
+      processorOptions: { sab: sab, mediaChannelCount: this.channelCount },
+      outputChannelCount: [trackInfo.numberOfChannels]
     });
     this.volume = new GainNode(this.audioContext);
     this.audioSink.connect(this.volume).connect(this.audioContext.destination);
@@ -194,19 +194,50 @@ export class AudioRenderer {
     return (1 - this.ringbuffer.available_write() / this.ringbuffer.capacity()) * 100;
   }
 
+  // From a array of Float32Array containing planar audio data `input`, writes
+  // interleaved audio data to `output`. Start the copy at sample
+  // `inputOffset`: index of the sample to start the copy from
+  // `inputSamplesToCopy`: number of input samples to copy
+  // `output`: a Float32Array to write the samples to
+  // `outputSampleOffset`: an offset in `output` to start writing
+  interleave(inputs, inputOffset, inputSamplesToCopy, output, outputSampleOffset) {
+    if (inputs.length * inputs[0].length < output.length) {
+      throw `not enough space in destination (${inputs.length * inputs[0].length} < ${output.length}})`
+    }
+    let channelCount = inputs.length;
+    let outIdx = outputSampleOffset;
+    let inputIdx = Math.floor(inputOffset / channelCount);
+    var channel = inputOffset % channelCount;
+    for (var i = 0; i < inputSamplesToCopy; i++) {
+      output[outIdx++] = inputs[channel][inputIdx];
+      if (++channel == inputs.length) {
+        channel = 0;
+        inputIdx++;
+      }
+    }
+  }
+
   bufferAudioData(data) {
+    if (this.interleavingBuffers.length != data.numberOfChannels) {
+      this.interleavingBuffers = new Array(this.channelCount);
+      for (var i = 0; i < this.interleavingBuffers.length; i++) {
+        this.interleavingBuffers[i] = new Float32Array(data.numberOfFrames);
+      }
+    }
+
     debugLog("bufferAudioData(%d)", data.timestamp);
+    // Write to temporary planar arrays, and interleave into the ring buffer.
+    for (var i = 0; i < this.channelCount; i++) {
+      data.copyTo(this.interleavingBuffers[i], { planeIndex: i });
+    }
     // Write the data to the ring buffer. Because it wraps around, there is
     // potentially two copyTo to do.
-    this.ringbuffer.writeCallback(data.numberOfFrames, function(first_part, second_part) {
-      data.copyTo(first_part, {
-        planeIndex:0, frameCount: first_part.length
-      });
-      if (second_part.byteLength) {
-        data.copyTo(second_part, {
-          planeIndex:0, frameOffset: first_part.length
-        })
+    this.ringbuffer.writeCallback(
+      data.numberOfFrames * data.numberOfChannels,
+      (first_part, second_part) => {
+        this.interleave(this.interleavingBuffers, 0, first_part.length, first_part, 0);
+        this.interleave(this.interleavingBuffers, first_part.length, second_part.length, second_part, 0);
       }
-    });
+    );
   }
 }

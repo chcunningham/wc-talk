@@ -1,41 +1,64 @@
 <!doctype html>
 <style>
-  body {background-color: black;}
+  body {
+    background-color: black;
+    font-family: sans-serif;
+    color: white;
+  }
+  canvas {
+    margin: 0 auto;
+  }
 </style>
 <canvas style="outline: 1px solid"></canvas>
+<div id=controls>
+<button>Play</button>
+<label for=volume>Volume</label>
+<input id=volume type=range value=0.8 min=0 max=1.0 step=0.01></input>
+Audio buffer health:
+<progress min=0 max=100></progress>
+</div>
 
-<script src="https://gpac.github.io/mp4box.js/dist/mp4box.all.min.js"></script>
+<script src="mp4box.all.min.js"></script>
 
 <script type="module">
+  window.$ = document.querySelector.bind(document);
   import {VideoRenderer} from "./video_renderer.js";
   import {AudioRenderer} from "./audio_renderer.js";
 
-  // TODO: move to worker.
   let audioRenderer = new AudioRenderer();
   let audioReady = audioRenderer.initialize('bbb_audio_aac_frag.mp4');
 
   // TODO: move to worker. Use OffscreenCanvas.
+  let canvas = $("canvas");
   let videoRenderer = new VideoRenderer();
-  let videoReady = videoRenderer.initialize('bbb_video_avc_frag.mp4', document.querySelector("canvas"));
+  let videoReady = videoRenderer.initialize('bbb_video_avc_frag.mp4', canvas);
 
   await Promise.all([audioReady, videoReady]);
 
-  // Audio-driven rendering.
-  audioRenderer.startPlaying();
+  $('#volume').onchange = function(e) {
+    audioRenderer.setVolume(e.target.value);
+  }
+
+  $('button').onclick = function(e) {
+    var button = e.target;
+    if (button.innerText == "Play") {
+      console.log("playback start");
+      // Audio can only start in reaction to a user-gesture.
+      audioRenderer.play().then(() => console.log("playback started"));
+      button.innerText = "Pause";
+    } else {
+      console.log("playback start");
+      // Audio can only start in reaction to a user-gesture.
+      audioRenderer.pause().then(() => console.log("playback pause"));
+      button.innerText = "Play"
+    }
+  }
+
   window.requestAnimationFrame(function renderVideo() {
     videoRenderer.render(audioRenderer.getMediaTime());
+    $('progress').value = audioRenderer.bufferHealth();
     window.requestAnimationFrame(renderVideo);
   });
-
-
-  // // Wall clock rendering.
-  // let startTimeMs = performance.now();
-  // function play() {
-  //   let mediaTimeUs = (performance.now() - startTimeMs) * 1000;
-  //   videoRenderer.render(mediaTimeUs)
-  //   window.requestAnimationFrame(play);
-  // }
-  // play();
 </script>
 
 </html>

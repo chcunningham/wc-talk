@@ -3,11 +3,11 @@
 This repo contains 2 samples using [WebCodecs](https://w3c.github.io/webcodecs/). 
 These were presented at the IIT WebRTC 2021 conference (TODO: track down the recording). 
 
-**rapid_video_painter.html** 
+## rapid_video_painter.html
 
 Demuxes a video mp4, decodes, and renders the `VideoFrames` to a `Canvas` ASAP.
 
-**simple_video_player.html** 
+## simple_video_player.html
 
 Demxues both audio and video mp4s, decodes them, and renders both with a/v synchrnoization using `Canvas` and `AudioWorklet`.
 

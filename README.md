@@ -1,7 +1,6 @@
 # WebCodecs Samples
 
-This repo contains 2 samples using [WebCodecs](https://w3c.github.io/webcodecs/). 
-These were presented at the IIT WebRTC 2021 conference (TODO: track down the recording). 
+This repo contains 2 samples using [WebCodecs](https://w3c.github.io/webcodecs/). These were presented at the IIT WebRTC 2021 conference ([presentation recording](https://www.youtube.com/watch?v=U8T5U8sN5d4)).
 
 ## rapid_video_painter.html
 

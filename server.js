@@ -26,11 +26,12 @@ http.createServer({}, function(request, response) {
       return;
     }
 
-    if (fs.statSync(filename).isDirectory())
+    if (fs.statSync(filename).isDirectory()) {
       if (filename[filename.length-1] != '/') {
         filename += '/';
       }
-      filename += 'index.html';
+      filename += 'simple_video_player.html';
+    }
 
     fs.readFile(filename, "binary", function(err, file) {
       if(err) {

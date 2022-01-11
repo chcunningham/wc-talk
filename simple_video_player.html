@@ -39,26 +39,34 @@ Audio buffer health:
     audioRenderer.setVolume(e.target.value);
   }
 
+  let playing = false;
+  let progressElement = $('progress');
+  progressElement.value = audioRenderer.bufferHealth();
+
   $('button').onclick = function(e) {
     var button = e.target;
     if (button.innerText == "Play") {
       console.log("playback start");
+      playing = true;
       // Audio can only start in reaction to a user-gesture.
       audioRenderer.play().then(() => console.log("playback started"));
       button.innerText = "Pause";
+
+      window.requestAnimationFrame(function renderVideo() {
+        if (!playing)
+          return;
+
+        videoRenderer.render(audioRenderer.getMediaTime());
+        progressElement.value = audioRenderer.bufferHealth();
+        window.requestAnimationFrame(renderVideo);
+      });
     } else {
-      console.log("playback start");
-      // Audio can only start in reaction to a user-gesture.
+      console.log("playback pause");
+      playing = false;
       audioRenderer.pause().then(() => console.log("playback pause"));
       button.innerText = "Play"
     }
   }
-
-  window.requestAnimationFrame(function renderVideo() {
-    videoRenderer.render(audioRenderer.getMediaTime());
-    $('progress').value = audioRenderer.bufferHealth();
-    window.requestAnimationFrame(renderVideo);
-  });
 </script>
 
 </html>

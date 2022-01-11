@@ -1,5 +1,5 @@
 const DATA_BUFFER_DECODE_TARGET_DURATION = 0.3;
-const DATA_BUFFER_DURATION = 0.5;
+const DATA_BUFFER_DURATION = 0.6;
 const DECODER_QUEUE_SIZE_MAX = 5;
 const ENABLE_DEBUG_LOGGING = false;
 
@@ -154,42 +154,74 @@ export class AudioRenderer {
     });
   }
 
-  // Returned the duration of audio that can be enqueued in the ring buffer.
-  availableWrite() {
-    return this.ringbuffer.available_write() / this.sampleRate;
+  async fillDataBuffer() {
+    // This method is called from multiple places to ensure the buffer stays
+    // healthy. Sometimes these calls may overlap, but at any given point only
+    // one call is desired.
+    if (this.fillInProgress)
+      return;
+
+    this.fillInProgress = true;
+    // This should be this file's ONLY call to the *Internal() variant of this method.
+    await this.fillDataBufferInternal();
+    this.fillInProgress = false;
   }
 
-  async fillDataBuffer() {
-    let inBuffer = this.ringbuffer.capacity() - this.availableWrite();
-    if (inBuffer > DATA_BUFFER_DECODE_TARGET_DURATION ||
-        this.decoder.decodeQueueSize > DECODER_QUEUE_SIZE_MAX) {
-      debugLog(
-        `audio buffer full (target : ${DATA_BUFFER_DECODE_TARGET_DURATION}, current: ${inBuffer}), delaying decode`);
-        window.setTimeout(this.fillDataBuffer.bind(this), 1000 * inBuffer / this.sampleRate / 2);
-    }
-    if (this.init_resolver) {
-      this.init_resolver();
-      this.init_resolver = null;
+  async fillDataBufferInternal() {
+    debugLog(`fillDataBufferInternal()`);
+
+    if (this.decoder.decodeQueueSize >= DECODER_QUEUE_SIZE_MAX) {
+      debugLog('\tdecoder saturated');
+      // Some audio decoders are known to delay output until the next input.
+      // Make sure the DECODER_QUEUE_SIZE is big enough to avoid stalling on the
+      // return below. We're relying on decoder output callback to trigger
+      // another call to fillDataBuffer().
+      console.assert(DECODER_QUEUE_SIZE_MAX >= 2);
+      return;
     }
 
-    // This method can be called from multiple places and we some may already
-    // be awaiting a demuxer read (only one read allowed at a time).
-    if (this.fillInProgress) {
-      return false;
-    }
-    this.fillInProgress = true;
+    let usedBufferElements = this.ringbuffer.capacity() - this.ringbuffer.available_write();
+    let usedBufferSecs = usedBufferElements / (this.channelCount * this.sampleRate);
+    let pcntOfTarget = 100 * usedBufferSecs / DATA_BUFFER_DECODE_TARGET_DURATION;
+    if (usedBufferSecs >= DATA_BUFFER_DECODE_TARGET_DURATION) {
+      debugLog(`\taudio buffer full usedBufferSecs: ${usedBufferSecs} pcntOfTarget: ${pcntOfTarget}`);
 
-    // Decode up to the buffering target
-    while (this.availableWrite() > DATA_BUFFER_DECODE_TARGET_DURATION &&
+      // When playing, schedule timeout to periodically refill buffer. Don't
+      // bother scheduling timeout if decoder already saturated. The output
+      // callback will call us back to keep filling.
+      if (this.playing)
+        // Timeout to arrive when buffer is half empty.
+        window.setTimeout(this.fillDataBuffer.bind(this), 1000 * usedBufferSecs / 2);
+
+      // Initialize() is done when the buffer fills for the first time.
+      if (this.init_resolver) {
+        this.init_resolver();
+        this.init_resolver = null;
+      }
+
+      // Buffer full, so no further work to do now.
+      return;
+    }
+
+    // Decode up to the buffering target or until decoder is saturated.
+    while (usedBufferSecs < DATA_BUFFER_DECODE_TARGET_DURATION &&
       this.decoder.decodeQueueSize < DECODER_QUEUE_SIZE_MAX) {
+      debugLog(`\tmoar samples. usedBufferSecs:${usedBufferSecs} < target:${DATA_BUFFER_DECODE_TARGET_DURATION}.`);
       let sample = await this.demuxer.readSample();
       this.decoder.decode(this.makeChunk(sample));
+
+      // NOTE: awaiting the demuxer.readSample() above will also give the
+      // decoder output callbacka a chance to run, so we may see usedBufferSecs
+      // increase.
+      usedBufferElements = this.ringbuffer.capacity() - this.ringbuffer.available_write();
+      usedBufferSecs = usedBufferElements / (this.channelCount * this.sampleRate);
     }
 
-    this.fillInProgress = false;
-    // Don't schedule more decoding operations when not playing.
-    if (this.playing) {
-      window.setTimeout(this.fillDataBuffer.bind(this), 0);
+    if (ENABLE_DEBUG_LOGGING) {
+      let logPrefix = usedBufferSecs >= DATA_BUFFER_DECODE_TARGET_DURATION ?
+          '\tbuffered enough' : '\tdecoder saturated';
+      pcntOfTarget = 100 * usedBufferSecs / DATA_BUFFER_DECODE_TARGET_DURATION;
+      debugLog(logPrefix + `; bufferedSecs:${usedBufferSecs} pcntOfTarget: ${pcntOfTarget}`);
     }
   }
 
@@ -228,19 +260,39 @@ export class AudioRenderer {
       }
     }
 
-    debugLog("bufferAudioData(%d)", data.timestamp);
+    debugLog(`bufferAudioData() ts:${data.timestamp} durationSec:${data.duration / 1000000}`);
     // Write to temporary planar arrays, and interleave into the ring buffer.
     for (var i = 0; i < this.channelCount; i++) {
       data.copyTo(this.interleavingBuffers[i], { planeIndex: i });
     }
     // Write the data to the ring buffer. Because it wraps around, there is
     // potentially two copyTo to do.
-    this.ringbuffer.writeCallback(
+    let wrote = this.ringbuffer.writeCallback(
       data.numberOfFrames * data.numberOfChannels,
       (first_part, second_part) => {
         this.interleave(this.interleavingBuffers, 0, first_part.length, first_part, 0);
         this.interleave(this.interleavingBuffers, first_part.length, second_part.length, second_part, 0);
       }
     );
+
+    // FIXME - this could theoretically happen since we're pretty agressive
+    // about saturating the decoder without knowing the size of the
+    // AudioData.duration vs ring buffer capacity.
+    console.assert(wrote == data.numberOfChannels * data.numberOfFrames, 'Buffer full, dropping data!')
+
+    // Logging maxBufferHealth below shows we currently max around 73%, so we're
+    // safe from the assert above *for now*. We should add an overflow buffer
+    // just to be safe.
+    // let bufferHealth = this.bufferHealth();
+    // if (!('maxBufferHealth' in this))
+    //   this.maxBufferHealth = 0;
+    // if (bufferHealth > this.maxBufferHealth) {
+    //   this.maxBufferHealth = bufferHealth;
+    //   console.log(`new maxBufferHealth:${this.maxBufferHealth}`);
+    // }
+
+    // fillDataBuffer() gives up if too much decode work is queued. Keep trying
+    // now that we've finished some.
+    this.fillDataBuffer();
   }
 }

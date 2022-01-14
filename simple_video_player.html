@@ -8,15 +8,22 @@
   canvas {
     margin: 0 auto;
   }
+  #controls {
+    margin-bottom: 10px;
+  }
+  #loading {
+    font-size: 2em;
+  }
 </style>
-<canvas style="outline: 1px solid"></canvas>
 <div id=controls>
-<button>Play</button>
-<label for=volume>Volume</label>
-<input id=volume type=range value=0.8 min=0 max=1.0 step=0.01></input>
-Audio buffer health:
-<progress min=0 max=100></progress>
+  <div id=loading>Loading...</div>
+  <button disabled=true>Play</button>
+  <label for=volume>Volume</label>
+  <input id=volume type=range value=0.8 min=0 max=1.0 step=0.01></input>
+  Audio buffer health:
+  <progress min=0 max=100></progress>
 </div>
+<canvas style="outline: 1px solid"></canvas>
 
 <script src="mp4box.all.min.js"></script>
 
@@ -43,14 +50,20 @@ Audio buffer health:
   let progressElement = $('progress');
   progressElement.value = audioRenderer.bufferHealth();
 
-  $('button').onclick = function(e) {
-    var button = e.target;
-    if (button.innerText == "Play") {
+  let playButton = $('button');
+  let loadingElement = $('#loading');
+
+  // Enable play now that we're loaded
+  playButton.disabled = false;
+  loadingElement.innerText = 'Ready! Click play.'
+
+  playButton.onclick = function(e) {
+    if (playButton.innerText == "Play") {
       console.log("playback start");
       playing = true;
       // Audio can only start in reaction to a user-gesture.
       audioRenderer.play().then(() => console.log("playback started"));
-      button.innerText = "Pause";
+      playButton.innerText = "Pause";
 
       window.requestAnimationFrame(function renderVideo() {
         if (!playing)
@@ -64,7 +77,7 @@ Audio buffer health:
       console.log("playback pause");
       playing = false;
       audioRenderer.pause().then(() => console.log("playback pause"));
-      button.innerText = "Play"
+      playButton.innerText = "Play"
     }
   }
 </script>

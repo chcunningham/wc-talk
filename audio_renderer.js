@@ -117,7 +117,7 @@ export class AudioRenderer {
     return this.audioContext.suspend();
   }
 
-  getMediaTime(useAudioContextOutputLatency) {
+  getTotalOutputLatencyInSeconds(useAudioContextOutputLatency) {
     let totalOutputLatency = 0.0;
     if (!useAudioContextOutputLatency || this.audioContext.outputLatency == undefined) {
       // Put appropriate values for Chromium here, not sure what latencies are
@@ -128,6 +128,10 @@ export class AudioRenderer {
     }
     // This looks supported by Chromium, always 128 / samplerate.
     totalOutputLatency += this.audioContext.baseLatency;
+    return totalOutputLatency;
+  }
+
+  getMediaTimeInMicroSeconds(totalOutputLatency) {
     // The currently rendered audio sample is the current time of the
     // AudioContext, offset by the total output latency, that is composed of
     // the internal buffering of the AudioContext (e.g., double buffering), and

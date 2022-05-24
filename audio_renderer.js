@@ -117,9 +117,9 @@ export class AudioRenderer {
     return this.audioContext.suspend();
   }
 
-  getMediaTime() {
+  getMediaTime(useAudioContextOutputLatency) {
     let totalOutputLatency = 0.0;
-    if (this.audioContext.outputLatency == undefined) {
+    if (!useAudioContextOutputLatency || this.audioContext.outputLatency == undefined) {
       // Put appropriate values for Chromium here, not sure what latencies are
       // used. Likely OS-dependent, certainly hardware dependant. Assume 40ms.
       totalOutputLatency += 0.04;

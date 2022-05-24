@@ -22,6 +22,9 @@
   <input id=volume type=range value=0.8 min=0 max=1.0 step=0.01></input>
   Audio buffer health:
   <progress min=0 max=100></progress>
+  Use AudioContext.outputLatency:
+  <input id=outputLatency type=checkbox></input>
+  (Plug Bluetooth headset for best results)
 </div>
 <canvas style="outline: 1px solid"></canvas>
 
@@ -41,6 +44,14 @@
   let videoReady = videoRenderer.initialize('bbb_video_avc_frag.mp4', canvas);
 
   await Promise.all([audioReady, videoReady]);
+
+  let isAudioContextOutputLatencySupported = ('outputLatency' in AudioContext.prototype);
+  let useAudioContextOutputLatency = isAudioContextOutputLatencySupported;
+  $('#outputLatency').disabled = !isAudioContextOutputLatencySupported;
+  $('#outputLatency').checked = isAudioContextOutputLatencySupported;
+  $('#outputLatency').onchange = function(e) {
+    useAudioContextOutputLatency = e.target.checked;
+  }
 
   $('#volume').onchange = function(e) {
     audioRenderer.setVolume(e.target.value);
@@ -69,7 +80,7 @@
         if (!playing)
           return;
 
-        videoRenderer.render(audioRenderer.getMediaTime());
+        videoRenderer.render(audioRenderer.getMediaTime(useAudioContextOutputLatency));
         progressElement.value = audioRenderer.bufferHealth();
         window.requestAnimationFrame(renderVideo);
       });
